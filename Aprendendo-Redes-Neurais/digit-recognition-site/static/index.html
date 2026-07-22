@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reconhecedor de Dígitos - Rede Neural</title>
+
+    <!-- 1. Importa o Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 2. Configurações adicionais do Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: '#0070f3',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
+
+    <div class="max-w-5xl w-full bg-white rounded-2xl shadow-xl p-6 sm:p-8 flex flex-col items-center">
+        
+        <!-- Cabeçalho -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
+                Desenhe sua Forma
+            </h1>
+            <p class="mt-2 text-sm text-slate-500">
+                Use o mouse ou o touch para desenhar e clique em Salvar.
+            </p>
+        </header>
+
+        <!-- Container Principal (Lado a Lado) -->
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-8 w-full items-start">
+            
+            <!-- Coluna Esquerda: Canvas e Botões (Ocupa 5/12 do espaço) -->
+            <div class="md:col-span-5 flex flex-col items-center">
+                <div class="bg-white p-3 rounded-2xl shadow-md border border-slate-100">
+                    <!-- Canvas Principal de desenho -->
+                    <canvas id="canvasMain" width="256" height="256" class="rounded-xl cursor-crosshair bg-white touch-none"></canvas>
+                </div>
+
+                <!-- Canvas auxiliar oculto (8x8) -->
+                <canvas id="canvasSmall" width="8" height="8" class="hidden"></canvas>
+
+                <!-- Botões -->
+                <div class="flex gap-4 mt-6 w-full max-w-[280px]">
+                    <button class="flex-1 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm hover:bg-slate-200 active:scale-95 transition" onclick="limparCanvas()">
+                        Limpar
+                    </button>
+                    <button class="flex-1 px-4 py-2.5 rounded-xl bg-brand text-white font-bold text-sm shadow-md shadow-blue-500/20 hover:bg-blue-600 active:scale-95 transition" onclick="enviarDesenho()">
+                        Salvar (8x8)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Coluna Direita: Resultados (Ocupa 7/12 do espaço e inicia escondida) -->
+            <!-- Coluna Direita: Resultados (Ocupa 7/12 do espaço) -->
+            <div id="resultadoContainer" class="hidden md:col-span-7 flex flex-col gap-6 bg-slate-50 border border-slate-100 rounded-2xl p-6">
+                
+                <!-- Topo: Resposta e Matriz 8x8 Lado a Lado -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                    <!-- Badge de Resposta da Rede -->
+                    <div class="bg-blue-100 border border-blue-200 text-blue-800 rounded-xl p-6 text-center h-full flex flex-col justify-center">
+                        <h4 class="text-xs font-bold text-blue-500 uppercase tracking-wider mb-2">Previsão</h4>
+                        <h3 id="answer" class="text-lg font-extrabold sm:text-xl">
+                            Número previsto pela Rede: <span class="text-3xl text-brand ml-2 font-black">-</span>
+                        </h3>
+                    </div>
+
+                    <!-- Entrada 8x8 (Compacta) -->
+                    <div class="flex flex-col items-center bg-white p-4 rounded-xl border border-slate-200/60 shadow-sm h-full justify-center">
+                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Matriz 8x8 Gerada</h4>
+                        <img id="graficoResultado" src="" alt="Gráfico do dígito" class="w-32 h-32 object-contain rounded-lg border border-slate-100" />
+                    </div>
+                </div>
+
+                <!-- Base: Grafo dos Neurônios GIGANTE -->
+                <div class="flex flex-col bg-white p-6 rounded-xl border border-slate-200/60 shadow-sm w-full">
+                    <div class="text-center mb-4">
+                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Visualização Detalhada da Rede Neural</h4>
+                        <p class="text-xs text-slate-400 mt-1">Intensidade de cor baseada no nível de ativação real dos neurônios</p>
+                    </div>
+                    <!-- Removido o limite de tamanho. Agora ele se expande no máximo de largura disponível -->
+                    <div class="w-full overflow-hidden flex justify-center">
+                        <img id="graficoRede" src="" alt="Gráfico da rede" class="w-full h-auto object-contain max-h-[550px] rounded-lg" />
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- Barra de Status / Logs -->
+        <div id="status" class="mt-8 px-4 py-3 bg-slate-50 text-slate-500 rounded-xl text-xs font-mono text-center w-full max-w-xl border border-slate-100">
+            Aguardando desenho...
+        </div>
+
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvasMain');
+        const ctx = canvas.getContext('2d');
+        const canvasSmall = document.getElementById('canvasSmall');
+        const ctxSmall = canvasSmall.getContext('2d');
+        const statusDiv = document.getElementById('status');
+        let isDrawing = false;
+
+        // Configuração inicial do Canvas (fundo branco, pincel preto)
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 30; // Grossura da linha
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Lógica para desenhar (Suporta Mouse e Touch de celular)
+        function getCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            const coords = getCoords(e);
+            ctx.beginPath();
+            ctx.moveTo(coords.x, coords.y);
+            e.preventDefault();
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const coords = getCoords(e);
+            ctx.lineTo(coords.x, coords.y);
+            ctx.stroke();
+            e.preventDefault();
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        // Eventos de Mouse
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseleave', stopDrawing);
+
+        // Eventos de Touch (Celular)
+        canvas.addEventListener('touchstart', startDrawing);
+        canvas.addEventListener('touchmove', draw);
+        canvas.addEventListener('touchend', stopDrawing);
+
+        function limparCanvas() {
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            statusDiv.innerText = "Canvas limpo.";
+            document.getElementById('resultadoContainer').classList.add('hidden');
+        }
+
+        async function enviarDesenho() {
+            statusDiv.innerText = "Enviando imagem...";
+
+            // 1. Desenha o conteúdo do canvas de 256x256 reduzido no canvas de 8x8
+            ctxSmall.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, 8, 8);
+
+            // 2. Extrai os pixels diretamente do canvas de 8x8
+            const imgData = ctxSmall.getImageData(0, 0, 8, 8);
+            const rgba = imgData.data;
+
+            const pixelsCinza = [];
+
+            // 3. Converte RGBA para Escala de Cinza (0 a 16)
+            for (let i = 0; i < rgba.length; i += 4) {
+                const r = rgba[i];
+                const g = rgba[i + 1];
+                const b = rgba[i + 2];
+
+                const cinza255 = 0.299 * r + 0.587 * g + 0.114 * b;
+                
+                // Mapeia para 0-16 com inversão (fundo branco = 0, traço preto = 16)
+                const valor0a16 = Math.round((255 - cinza255) * (16 / 255));
+
+                pixelsCinza.push(valor0a16);
+            }
+
+            try {
+                // Envia para o backend Python
+                const response = await fetch('/api/process_drawing', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pixels: pixelsCinza })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.innerHTML = `<strong>Sucesso!</strong>`;
+                    
+                    const container = document.getElementById('resultadoContainer');
+                    const img = document.getElementById('graficoResultado');
+                    const img2 = document.getElementById('graficoRede');
+                    const answer = document.getElementById('answer');
+                    
+                    img.src = data.graphic_image;
+                    img2.src = data.nn_image;
+                    answer.innerHTML = `Número previsto pela Rede: <span class="text-3xl text-brand ml-2 font-black">${data.number}</span>`;
+                    
+                    // Mostra o container usando utilitários do Tailwind (troca 'hidden' por 'grid')
+                    container.classList.remove('hidden');
+                    container.classList.add('grid');
+                } else {
+                    statusDiv.innerText = `Erro: ${data.detail}`;
+                }
+            } catch (error) {
+                statusDiv.innerText = "Erro ao conectar com o servidor Python.";
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>
