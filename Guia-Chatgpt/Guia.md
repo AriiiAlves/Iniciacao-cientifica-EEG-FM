@@ -1,3 +1,9 @@
+# Proposta da IC
+
+Modelos de fundação têm se tornado centrais no avanço de aplicações de aprendizado de máquina em diversos domínios, incluindo a área da saúde. No entanto, apesar de seu amplo estudo em tarefas de visão computacional nesse domínio de conhecimento, sua aplicação a sinais fisiológicos ainda é incipiente. **Com exceção do eletrocardiograma, poucos esforços foram dedicados ao desenvolvimento e à avaliação desses modelos para outros sinais**. Este projeto propõe uma **avaliação técnica e aprofundada dos modelos de fundação voltados a sinais fisiológicos, considerando critérios como custo computacional e desempenho em múltiplas tarefas**. Particularmente, esta frente irá pesquisar por modelos de fundação para eletroencefalogramas (EEGs), exame não evasivo que mede a atividade elétrica espontânea do cérebro. Espera-se, com isso, contribuir para o avanço científico nessa interseção entre inteligência artificial e saúde, além de proporcionar ao bolsista uma formação qualificada em aprendizado de máquina com foco em aplicações interdisciplinares.
+
+# Guia
+
 Como seu objetivo final é **entender as representações internas aprendidas por modelos de fundação para EEG**, vale a pena organizar o aprendizado de forma progressiva. Em vez de estudar IA de forma genérica, foque no que ajuda a responder perguntas como:
 
 * O que cada camada representa?
