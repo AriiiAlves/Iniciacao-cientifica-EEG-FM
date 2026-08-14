@@ -57,6 +57,15 @@ A intenção é ser enxuto para posterior consulta rápida.
 
 == Attention is All You Need
 
+Nota rápida: Esse artigo juntou várias pesquisas para criar um modelo final.
+
+- Attention Mechanisms - "Neural Machine Translation by Jointly Learning to Align and Translate", "Effective Approaches to Attention-based Neural Machine Translation"
+- Arquitetura Encoder-Decoder (Seq2Seq) - "Sequence to Sequence Learning with Neural Networks", Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation"
+- Conexões residuais (blocos `Add`) - "Deep Residual Learning for Image Recognition"
+- Normalização de Camada - "Layer Normalization"
+- Positional Embeddings - "End-To-End Memory Networks", "Convolutional Sequence to Sequence Learning"
+- Multi-Head Self-Attention - "A Structured Self-Attentive Sentence Embedding"
+
 === Arquitetura do Modelo
 
 A maioria dos modelos competitivos de transdução (conversão) de sequência neural possuem uma estrutura encoder-decoder.
@@ -83,7 +92,7 @@ O Transformer segue essa arquitetura geral usando self-attention empilhados e pr
 - *Output Sub-Camada*: $"LayerNorm"(x+"Sublayer"(x))$ (Add + Normaliza)
 - Todas as Sub-Camadas possuem dimensionalidade $d=512$ 
 
-O Self-Attention decide onde olhar (decide quais palavras são importantes) e Position-Wise FFN processa e transforma o output em conceitos abstratos (relações sintáticas complexas, papéis semânticos e tipos de entidades). É um *vetor enriquecido*.
+O *Self-Attention decide onde olhar* (decide quais palavras são importantes) e *Position-Wise FFN processa e transforma o output em conceitos abstratos* (relações sintáticas complexas, papéis semânticos e tipos de entidades). É um *vetor enriquecido*.
 
 *Decoder*
 
@@ -105,7 +114,43 @@ Gera as probabilidades de cada palavra do vocabulário ser o próximo token.
 
 ==== Attention
 
+*Scaled Dot-Product Attention*
 
+$ "Attention"(Q,K,V) = "softmax"((Q K^T)/sqrt(d_k))V $
+
+- Q = Matriz Query (dimensão $d_k$)
+- K = Matriz Key (dimensão $d_k$)
+- V = Matriz Value (dimensão $d_v$)
+- $sqrt(d_k)$ = Normalização
+
+*Multi-Head Attention*
+
+Permite ao modelo prestar atenção a informações de diferentes subespaços de representação em diferentes posições. Só um cabeçote de atenção inibe isso (média).
+
+As Queries/Keys/Values são projetados linearmente $h$ vezes com diferentes projeções lineares aprendíveis. Os diferentes outputs são processados em paralelo, concatenados e projetados novamente.
+
+$ "MultiHead"(Q,K,V) = "Concat"("head"_1,...,"head"_h) W^O $
+$ "head"_i = "Attention"(Q W^Q_i, K W^K_i, V W^V_i) $
+
+- Projeções são matrizes de parâmetros $W^Q_i in RR^(d_"model" times d_k)$, $W^K_i in RR^(d_"model" times d_k)$ , $W^V_i in RR^(d_"model" times d_v)$
+
+No paper, $h=8$ camadas de atenção paralelas. $d_k=d_v=d_"model"/h=64$. (Assim, para um input de 512 itens, cada cabeçote vai analisar um recorte do input, com 64 itens)
+
+===== Aplicações do Attention no Modelo
+
+- Em camadas "encoder-decoder attention", Q (queries) vem do output do *decoder* anterior, e K/V (Key, Values) vêm do output do *encoder*. Isso permite que toda posição no decoder preste atenção a todas as posições da sequência de input. Ou seja, a representação inteira do texto de entrada (processada pelo Encoder) fica disponível como um mapa de referência (V,K). A camada anterior do decoder diz: "Estou tentando gerar a próxima palavra... O que preciso buscar no texto original?"
+
+- O encoder contém camadas self-attention. Em uma camada, K,V,Q vêm do mesmo lugar: a saída da camada anterior. Cada posição pode prestar atenção a todas as posições na camada anterior.
+
+- No decoder, da mesma forma. Previne-se vazamento de informação a ser adivinhada com uma máscara, definindo para $-infinity$ tudo que não se quer.
+
+==== Position-wise Feed-Forward Networks
+
+A FFN é aplicada a cada posição separadamente e identicamente. Consiste em duas transformações lineares com uma ativação ReLU entre elas.
+
+$ "FFN"(x) = max(0,x W_1 + b_1)W_2 + b_2 $
+
+(outra maneira de descrever isso é como duas convoluções de Kernel size 1).
 
 = Foundation Models
 
