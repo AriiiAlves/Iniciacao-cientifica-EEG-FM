@@ -69,10 +69,13 @@ $ "Self Attention" = "Softmax"((Q dot K^T)/sqrt(d_k) + M)V $
 
 = Aula 2 - Multi-Head Attention
 
+$ "Multi-Head"(Q,K,V) = "Concat"("head"_1,..."head"_2)W^O $
+
 1. Token Embedding + Positional Enconding gera um vetor $d_"model" = 512$.
 2. Geramos 3 matrizes Q,K,V a partir desse vetor, com $d_k=d_v=512$
 3. Para Q,K,V, quebramos em 8 peças de $d_i=64$. Cada uma vai para uma unidade de Self-Attention e vai gerar um vetor final.
-4. Os vetores são concatenados (unidos). O resultado é um vetor com um contexto muito mais rico.
+4. Os vetores são concatenados (unidos). 
+5. Uma camada linear final transforma a concatenação bruta em uma representação final refinada (mistura o que foi concatenado). O resultado é um vetor com um contexto muito mais rico.
 
 = Aula 3 - Positional Encoding
 
@@ -183,9 +186,11 @@ $ sigma = mat(sigma_(11) + sigma(21)) = mat(0.08164;0.1885) $
 $ y = (x'-mu)/sigma = mat(0, -1.2248, 1.2248; 1.414, -0.707, -0.707) $
 $ "out" = gamma dot y + beta $
 
-= Aula 5 - Blowing up the Transformer Encoder!
+= Aula 5 - Blowing up the Transformer Encoder! (ENCODER COMPLETO)
 
 Obs: Linhas = max_sequence_lenght, Colunas = d_k
+
+*ENTRADA DO ENCODER*
 
 1. Input Sentence
 
@@ -197,9 +202,9 @@ TRATAMENTO DE INPUT
 $ "PE"_("pos",2i) = sin("pos"/10000^((2i)/d_"model")) $
 $ "PE"_("pos",2i+1) = cos("pos"/10000^((2i)/d_"model")) $
 
-ENCODER
+*ENCODER*
 
-4. *Generate Q,K,V* -> Cada vetor sofre uma *projeção linear* para gerar os vetores $w_q$,$w_k$,$w_v$. Juntando todos os vetores em uma matriz:
+1. *Generate Q,K,V* -> Cada vetor sofre uma *projeção linear* para gerar os vetores $w_q$,$w_k$,$w_v$. Juntando todos os vetores em uma matriz:
 
 $ Q = X W_Q + b_Q $
 $ K = X W_K + b_K $
@@ -207,36 +212,120 @@ $ V = X W_V + b_V $
 
 (onde $W_Q$,$W_K$, $W_V$ são matrizes aprendíveis que serão ajustadas pelo backpropagation)
 
-5. *Multi-Head* -> Cada vetor será quebrado em 8 blocos ($d=64$), para processamento paralelo e mais enriquecido em contexto.
-6. *Multi-Head Attention* -> Aplica Attention a cada uma das Heads. (A 1° linha de Q vezes a 2° linha de K tranposta, etc)
+2. *Multi-Head* -> Cada vetor será quebrado em 8 blocos ($d=64$), para processamento paralelo e mais enriquecido em contexto.
+3. *Multi-Head Self Attention* -> Aplica Attention a cada uma das Heads. (A 1° linha de Q vezes a 2° linha de K tranposta, etc)
 
 $ "Self Attention" = "Softmax"((Q dot K^T)/sqrt(d_k) + M)V $
 
-7. *Concatenate* -> Os 8 blocos são concatenados novamente
-8. *Add* -> Resultado da Concatenação + (Input Embedding + Positional Encoding). Soma-se o Attention ao Input inicial, evitando Vanishing Gradient (valores pequenos demais).
-9. *Layer Normalization* -> Estabiliza os valores, os deixando em torno de zero. Para cada `LayerNorm()`, existe um único tensor $gamma$ e $beta$.
+4. *Concatenate* -> Os 8 blocos são concatenados novamente
+
+$ "Multi-Head"(Q,K,V) = "Concat"("Self-Att"_1, ..., "Self-Att"_n)W^O $
+
+5. *Linear-Layer* ->  $W^O$ mistura as informações concatedadas, enriquecendo o vetor final.
+6. *Add* -> Resultado da Concatenação + (Input Embedding + Positional Encoding). Soma-se o Attention ao Input inicial, evitando Vanishing Gradient (valores pequenos demais).
+7. *Layer Normalization* -> Estabiliza os valores, os deixando em torno de zero. Para cada `LayerNorm()`, existe um único tensor $gamma$ e $beta$.
 
 $ y = gamma [(x-mu)/sigma] + beta $
 
 (onde $gamma$,$beta$ são parâmetros aprendíveis)
 
-10. *Linear + ReLU + Dropout* -> Linear é uma rede neural de camada única. Dropout é desligar neurônios aleatoriamente, zerando uma porcentagem das saídas deles, o que evita vício em padrões e permite generalizar. Entrada: $"max_seq" times 512$. Saída: $"max_seq" times 1024$
+8. *Linear + ReLU + Dropout* -> Linear é uma rede neural de camada única. Dropout é desligar neurônios aleatoriamente, zerando uma porcentagem das saídas deles, o que evita vício em padrões e permite generalizar. Entrada: $"max_seq" times 512$. Saída: $"max_seq" times 1024$
 
 $ y = "ReLU"(W_1 x + b_1) $
 
-11. *Linear* -> Outra rede neural de camada única, para comprimir de volta para $512$. Entrada: $"max_seq" times 1024$. Saída: $"max_seq" times 512$.
+9. *Linear* -> Outra rede neural de camada única, para comprimir de volta para $512$. Entrada: $"max_seq" times 1024$. Saída: $"max_seq" times 512$.
 
 $ y = W_2 x + b_2 $
 
-12. *Add* -> Resultado + Input da Rede neural
-13. *Layer Normalization* -> Estabiliza os valores.
+10. *Add* -> Resultado + Input da Rede neural
+11. *Layer Normalization* -> Estabiliza os valores.
 
 $ y = gamma [(x-mu)/sigma] + beta $
 
-14. Os vetores finais são uma representação muito mais rica em contexto do que os vetores iniciais.
-15. Fazemos tudo de novo (por ex, 12 vezes), para enriquecer ainda mais os vetores.
+12. Os vetores finais são uma representação muito mais rica em contexto do que os vetores iniciais.
+13. Fazemos tudo de novo (por ex, 12 vezes), para enriquecer ainda mais os vetores.
+14. Output: Vetor `max_sequence_lenght x 512` (max_sequence_lenght = n Tokens)
+15. Repetição
 
-DECODER
+*ENTRADA DO DECODER*
+
+1. Input -> A entrada é o que já foi gerado. 
+  - Padding serve para fixar tamanho da entrada
+  - Tamanho: `batch_size x max_seq_length x d_model`
+
+`<start> first second third <end> <padding> <padding> ... <padding>`
+
+2. *Positional Encoding* -> Adiciona-se ao embedding valores periódicos que informam a ordem/posição das palavras na sequência 
+
+$ "PE"_("pos",2i) = sin("pos"/10000^((2i)/d_"model")) $
+$ "PE"_("pos",2i+1) = cos("pos"/10000^((2i)/d_"model")) $
+
+*DECODER*
+
+3. *Generate Q,K,V* -> Cada vetor sofre uma *projeção linear* para gerar os vetores $w_q$,$w_k$,$w_v$. Juntando todos os vetores em uma matriz:
+
+$ Q = X W_Q + b_Q $
+$ K = X W_K + b_K $
+$ V = X W_V + b_V $
+
+4. *Multi-Head* -> Cada vetor será quebrado em 8 blocos ($d=64$), para processamento paralelo e mais enriquecido em contexto.
+5. *Masked Self Attention* ->  Aplica-se máscara, uma matriz triangular superior de $-infinity$'s, de modo que evita "trapaça" durante a tentativa de inferência, ocultando a palavra a ser adivinhada. usa-se $-infinity$ por causa da softmax.
+6. *Multi-Head Self Attention* -> Aplica Attention a cada uma das Heads. (A 1° linha de Q vezes a 2° linha de K tranposta, etc)
+
+$ "Self Attention" = "Softmax"((Q dot K^T + M)/sqrt(d_k) + M)V $
+
+7. *Concatenate* -> Os 8 blocos são concatenados novamente
+
+$ "Multi-Head"(Q,K,V) = "Concat"("Self-Att"_1, ..., "Self-Att"_n)W^O $
+
+8. *Linear-Layer* ->  $W^O$ mistura as informações concatedadas, enriquecendo o vetor final.
+9. *Add* -> Resultado da Concatenação + (Input Embedding + Positional Encoding). Soma-se o Attention ao Input inicial, evitando Vanishing Gradient (valores pequenos demais).
+10. *Layer Normalization* -> Estabiliza os valores, os deixando em torno de zero. Para cada `LayerNorm()`, existe um único tensor $gamma$ e $beta$.
+
+$ y = gamma [(x-mu)/sigma] + beta $
+
+11. *Generate Q,K,V* -> Cada vetor sofre uma *projeção linear* para gerar os vetores $w_q$,$w_k$,$w_v$. Q é gerado a partir do output anterior, e K/V a partir do Encoder. Juntando todos os vetores em uma matriz:
+
+$ Q = X_D W_Q + b_Q $
+$ K = X_E W_K + b_K $
+$ V = X_E W_V + b_V $
+
+12. *Multi-Head* -> Cada vetor será quebrado em 8 blocos ($d=64$), para processamento paralelo e mais enriquecido em contexto.
+13. *Multi-Head Cross Attention* -> Aplica Attention a cada uma das Heads. (A 1° linha de Q vezes a 2° linha de K tranposta, etc). Aqui, não precisa-se de máscara (Encoder funciona como um mapa)
+
+$ "Self Attention" = "Softmax"((Q dot K^T)/sqrt(d_k) + M)V $
+
+14. *Concatenate* -> Os 8 blocos são concatenados novamente
+15. *Linear-Layer* ->  $W^O$ mistura as informações concatedadas, enriquecendo o vetor final.
+
+$ "Multi-Head"(Q,K,V) = "Concat"("Self-Att"_1, ..., "Self-Att"_n)W^O $
+
+16. *Add* -> Resultado da Concatenação + Output anterior. Evita Vanishing Gradient (valores pequenos demais).
+17. *Layer Normalization* -> Estabiliza os valores, os deixando em torno de zero. Para cada `LayerNorm()`, existe um único tensor $gamma$ e $beta$.
+
+$ y = gamma [(x-mu)/sigma] + beta $
+
+18. *Linear + ReLU + Dropout* -> Linear é uma rede neural de camada única. Dropout é desligar neurônios aleatoriamente, zerando uma porcentagem das saídas deles, o que evita vício em padrões e permite generalizar. Entrada: $"max_seq" times 512$. Saída: $"max_seq" times 1024$
+
+$ y = "ReLU"(W_1 x + b_1) $
+
+19. *Linear* -> Outra rede neural de camada única, para comprimir de volta para $512$. Entrada: $"max_seq" times 1024$. Saída: $"max_seq" times 512$.
+
+$ y = W_2 x + b_2 $
+
+20. *Add* -> Resultado + Input da Rede neural
+21. *Layer Normalization* -> Estabiliza os valores.
+22. Repetição
+
+$ y = gamma [(x-mu)/sigma] + beta $
+
+*SAÍDA DO DECODER*
+
+1. *Linear* -> Rede neural de camada única, para transformar $512$ ($d_"model"$) em $"translation_vocab_size"$. Isso mapeia cada palavra para o vocabulário da linguagem final.
+2. *Softmax* -> Saída de probabilidades da próxima palavra a ser gerada.
+
+= Aula 6: Sentence Tokenization in Transformer Code
+
 
 
 = Nota Minha: Transformers é apenas sobre backpropagation.
@@ -254,3 +343,16 @@ O resto são técnicas para tentar melhorar esse aprendizado, "conceitos" que qu
 Isso se chama *Viés Indutivo* (Inductive Bias), suposições/facilidadeds que embutimos na arquitetura para forçar ou guiar a rede a aprender determinados padrões em vez de tentar aprender tudo do zero absoluto. Todas essas camadas, somas residuais, encodings e normalizações são o *nosso jeito de encurtar o caminho do gradiente* e viabilizar a otimização em tempo útil.
 
 Dizemos à rede: "A estrutura do seu cálculo será matrizes $Q, K, V$ passando por um softmax". O Backpropagation encontra o conteúdo: O otimizador preenche esse molde com os valores exatos de parâmetros que resolvem o problema.
+
+= Transformer Encoder in 100 lines of code!
+
+== Batch Data
+
+No treinamento, passamos múltiplos inputs (dataset) ao mesmo tempo. Esses múltiplos inputs constituem um batch (lote).
+
+- *Batch Gradient Descendent (BGD)* - Usa todo o conjunto de dados. 1 atualização por época (calcula o erro de todos os exemplos, calcula a média dos gradientes e atualiza). Caminho direto e estável até o mínimo, mas inviável para datasets gigantes.
+- *Stochastic Gradient Descendent (SGD)* - 1 única amostra aleatória por vez. N atualizações por época, de N amostras (para cada exemplo, calcula o gradiente e atualiza). Caminho rápido e caótico, computacionalmente leve mas com oscilação em torno do ponto ótimo.
+- *Mini-batch* - Pequeno lote de n < N amostras aleatórias por vez. N/n atualizações por época. É o meio termo.
+
+#figure(image("./images/batch-data.png", width: 50%))
+
